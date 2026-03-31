@@ -635,6 +635,105 @@ public class CameraUtils {
   }
 
 
+  @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+  public void setNightMode(String trackId, boolean enabled, MethodChannel.Result result) {
+    VideoCapturerInfo info = getUserMediaImpl.getCapturerInfo(trackId);
+    if (info == null) {
+      resultError("setNightMode", "Video capturer not found for id: " + trackId, result);
+      return;
+    }
+
+    if (info.capturer instanceof Camera2Capturer) {
+      CameraCaptureSession captureSession;
+      CameraDevice cameraDevice;
+      Surface surface;
+      Handler cameraThreadHandler;
+      CameraManager manager;
+
+      try {
+        Object session =
+                getPrivateProperty(
+                        Camera2Capturer.class.getSuperclass(), info.capturer, "currentSession");
+        manager =
+                (CameraManager)
+                        getPrivateProperty(Camera2Capturer.class, info.capturer, "cameraManager");
+        captureSession =
+                (CameraCaptureSession)
+                        getPrivateProperty(session.getClass(), session, "captureSession");
+        cameraDevice =
+                (CameraDevice) getPrivateProperty(session.getClass(), session, "cameraDevice");
+        surface = (Surface) getPrivateProperty(session.getClass(), session, "surface");
+        cameraThreadHandler =
+                (Handler) getPrivateProperty(session.getClass(), session, "cameraThreadHandler");
+      } catch (NoSuchFieldWithNameException e) {
+        resultError("setNightMode", "[NightMode] Failed to get `" + e.fieldName + "` from `" + e.className + "`", result);
+        return;
+      }
+
+      try {
+        final CaptureRequest.Builder captureRequestBuilder =
+                cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+
+        if (enabled) {
+          final CameraCharacteristics characteristics =
+                  manager.getCameraCharacteristics(cameraDevice.getId());
+          Range<Integer> isoRange =
+                  characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE);
+          int maxISO = isoRange != null ? isoRange.getUpper() : 3200;
+
+          captureRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF);
+          captureRequestBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, maxISO);
+          captureRequestBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, 200_000_000L); // 1/5s in ns
+          captureRequestBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, new Range<>(5, 5));
+          captureRequestBuilder.set(CaptureRequest.FLASH_MODE,
+                  isTorchOn ? CaptureRequest.FLASH_MODE_TORCH : CaptureRequest.FLASH_MODE_OFF);
+          Log.d(TAG, "[NightMode] enabled — maxISO=" + maxISO + " exposure=1/5s fps=5");
+        } else {
+          captureRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+          captureRequestBuilder.set(CaptureRequest.CONTROL_AE_LOCK, false);
+          captureRequestBuilder.set(CaptureRequest.FLASH_MODE,
+                  isTorchOn ? CaptureRequest.FLASH_MODE_TORCH : CaptureRequest.FLASH_MODE_OFF);
+          Log.d(TAG, "[NightMode] disabled — restored auto exposure");
+        }
+
+        captureRequestBuilder.addTarget(surface);
+        captureSession.setRepeatingRequest(captureRequestBuilder.build(), null, cameraThreadHandler);
+      } catch (CameraAccessException e) {
+        throw new RuntimeException(e);
+      }
+
+      result.success(null);
+      return;
+    }
+
+    if (info.capturer instanceof Camera1Capturer) {
+      Camera camera;
+      try {
+        Object session =
+                getPrivateProperty(
+                        Camera1Capturer.class.getSuperclass(), info.capturer, "currentSession");
+        camera = (Camera) getPrivateProperty(session.getClass(), session, "camera");
+      } catch (NoSuchFieldWithNameException e) {
+        resultError("setNightMode", "[NightMode] Failed to get `" + e.fieldName + "` from `" + e.className + "`", result);
+        return;
+      }
+
+      Camera.Parameters params = camera.getParameters();
+      List<String> supportedSceneModes = params.getSupportedSceneModes();
+      if (enabled && supportedSceneModes != null
+              && supportedSceneModes.contains(Camera.Parameters.SCENE_MODE_NIGHT)) {
+        params.setSceneMode(Camera.Parameters.SCENE_MODE_NIGHT);
+      } else {
+        params.setSceneMode(Camera.Parameters.SCENE_MODE_AUTO);
+      }
+      camera.setParameters(params);
+      result.success(null);
+      return;
+    }
+
+    resultError("setNightMode", "[NightMode] Video capturer not compatible", result);
+  }
+
   private class NoSuchFieldWithNameException extends NoSuchFieldException {
 
     String className;

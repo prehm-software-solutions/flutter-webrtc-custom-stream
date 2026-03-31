@@ -1073,6 +1073,24 @@ static FlutterWebRTCPlugin *sharedSingleton;
                                      details:nil]);
         }
       }
+  } else if ([@"mediaStreamTrackSetNightMode" isEqualToString:call.method]) {
+    NSDictionary* argsMap = call.arguments;
+    NSString* trackId = argsMap[@"trackId"];
+    BOOL enabled = [argsMap[@"enabled"] boolValue];
+    id<LocalTrack> track = self.localTracks[trackId];
+    if (track != nil && [track isKindOfClass:[LocalVideoTrack class]]) {
+      RTCVideoTrack* videoTrack = ((LocalVideoTrack*)track).videoTrack;
+      [self mediaStreamTrackSetNightMode:videoTrack enabled:enabled result:result];
+    } else {
+      if (track == nil) {
+        result([FlutterError errorWithCode:@"Track is nil" message:nil details:nil]);
+      } else {
+        result([FlutterError errorWithCode:[@"Track is class of "
+                                               stringByAppendingString:[[track class] description]]
+                                   message:nil
+                                   details:nil]);
+      }
+    }
   } else if ([@"mediaStreamTrackSwitchCamera" isEqualToString:call.method]) {
     NSDictionary* argsMap = call.arguments;
     NSString* trackId = argsMap[@"trackId"];

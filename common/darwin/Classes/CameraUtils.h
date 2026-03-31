@@ -29,6 +29,10 @@
                            exposurePoint:(nonnull NSDictionary*)exposurePoint
                             result:(nonnull FlutterResult)result;
 
+- (void)mediaStreamTrackSetNightMode:(nonnull RTCMediaStreamTrack*)track
+                           enabled:(BOOL)enabled
+                            result:(nonnull FlutterResult)result;
+
 - (void)mediaStreamTrackSwitchCamera:(nonnull RTCMediaStreamTrack*)track result:(nonnull FlutterResult)result;
 
 - (NSInteger)selectFpsForFormat:(nonnull AVCaptureDeviceFormat*)format targetFps:(NSInteger)targetFps;

@@ -271,6 +271,48 @@
 #endif
 }
 
+- (void)mediaStreamTrackSetNightMode:(RTCMediaStreamTrack*)track
+                           enabled:(BOOL)enabled
+                            result:(FlutterResult)result {
+#if TARGET_OS_IPHONE
+  AVCaptureDevice* device = [self currentDevice];
+  if (!device) {
+    NSLog(@"[NightMode] Video capturer is null. Can't set night mode");
+    result([FlutterError errorWithCode:@"mediaStreamTrackSetNightModeFailed" message:@"device is nil" details:nil]);
+    return;
+  }
+
+  NSError* error;
+  if ([device lockForConfiguration:&error] == NO) {
+    NSLog(@"[NightMode] Failed to acquire configuration lock. %@", error.localizedDescription);
+    result([FlutterError errorWithCode:@"mediaStreamTrackSetNightModeFailed" message:error.localizedDescription details:nil]);
+    return;
+  }
+
+  if (enabled) {
+    float maxISO = device.activeFormat.maxISO;
+    CMTime exposureDuration = CMTimeMake(1, 5);
+    [device setExposureModeCustomWithDuration:exposureDuration ISO:maxISO completionHandler:nil];
+    device.activeVideoMinFrameDuration = CMTimeMake(1, 5);
+    device.activeVideoMaxFrameDuration = CMTimeMake(1, 5);
+    NSLog(@"[NightMode] enabled — maxISO=%.0f exposure=1/5s fps=5", maxISO);
+  } else {
+    if ([device isExposureModeSupported:AVCaptureExposureModeContinuousAutoExposure]) {
+      [device setExposureMode:AVCaptureExposureModeContinuousAutoExposure];
+    }
+    device.activeVideoMinFrameDuration = kCMTimeInvalid;
+    device.activeVideoMaxFrameDuration = kCMTimeInvalid;
+    NSLog(@"[NightMode] disabled — restored auto exposure and default fps");
+  }
+
+  [device unlockForConfiguration];
+  result(nil);
+#else
+  NSLog(@"[NightMode] Not supported on macOS");
+  result([FlutterError errorWithCode:@"mediaStreamTrackSetNightModeFailed" message:@"Not supported on macOS" details:nil]);
+#endif
+}
+
 - (void)mediaStreamTrackSwitchCamera:(RTCMediaStreamTrack*)track result:(FlutterResult)result {
   if (!self.videoCapturer) {
     NSLog(@"Video capturer is null. Can't switch camera");

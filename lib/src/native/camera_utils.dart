@@ -90,4 +90,20 @@ class CameraUtils {
       throw Exception('setExposurePoint only support for mobile devices!');
     }
   }
+
+  /// Enables or disables night mode on the camera.
+  /// When enabled, sets maximum ISO and lowers the frame rate to 5 fps
+  /// for maximum brightness in low-light conditions.
+  /// Throws on unsupported platforms (e.g. macOS).
+  static Future<void> setNightMode(
+      MediaStreamTrack videoTrack, bool enabled) async {
+    if (WebRTC.platformIsAndroid || WebRTC.platformIsIOS) {
+      await WebRTC.invokeMethod(
+        'mediaStreamTrackSetNightMode',
+        <String, dynamic>{'trackId': videoTrack.id, 'enabled': enabled},
+      );
+    } else {
+      throw Exception('setNightMode only supported on mobile devices!');
+    }
+  }
 }

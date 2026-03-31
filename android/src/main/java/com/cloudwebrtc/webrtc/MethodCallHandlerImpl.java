@@ -772,6 +772,12 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         getUserMediaImpl.switchCamera(trackId, result);
         break;
       }
+      case "mediaStreamTrackSetNightMode": {
+        String trackId = call.argument("trackId");
+        boolean enabled = call.argument("enabled");
+        cameraUtils.setNightMode(trackId, enabled, result);
+        break;
+      }
       case "setVolume": {
         String trackId = call.argument("trackId");
         double volume = call.argument("volume");
