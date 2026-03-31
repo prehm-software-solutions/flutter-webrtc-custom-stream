@@ -706,32 +706,7 @@ public class CameraUtils {
       return;
     }
 
-    if (info.capturer instanceof Camera1Capturer) {
-      Camera camera;
-      try {
-        Object session =
-                getPrivateProperty(
-                        Camera1Capturer.class.getSuperclass(), info.capturer, "currentSession");
-        camera = (Camera) getPrivateProperty(session.getClass(), session, "camera");
-      } catch (NoSuchFieldWithNameException e) {
-        resultError("setNightMode", "[NightMode] Failed to get `" + e.fieldName + "` from `" + e.className + "`", result);
-        return;
-      }
-
-      Camera.Parameters params = camera.getParameters();
-      List<String> supportedSceneModes = params.getSupportedSceneModes();
-      if (enabled && supportedSceneModes != null
-              && supportedSceneModes.contains(Camera.Parameters.SCENE_MODE_NIGHT)) {
-        params.setSceneMode(Camera.Parameters.SCENE_MODE_NIGHT);
-      } else {
-        params.setSceneMode(Camera.Parameters.SCENE_MODE_AUTO);
-      }
-      camera.setParameters(params);
-      result.success(null);
-      return;
-    }
-
-    resultError("setNightMode", "[NightMode] Video capturer not compatible", result);
+    resultError("setNightMode", "[NightMode] Camera2 not available", result);
   }
 
   private class NoSuchFieldWithNameException extends NoSuchFieldException {
