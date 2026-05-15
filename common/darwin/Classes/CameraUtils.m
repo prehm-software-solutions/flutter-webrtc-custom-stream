@@ -290,12 +290,16 @@
   }
 
   if (enabled) {
-    float maxISO = device.activeFormat.maxISO;
     CMTime exposureDuration = CMTimeMake(1, 5);
-    [device setExposureModeCustomWithDuration:exposureDuration ISO:maxISO completionHandler:nil];
+    if ([device isExposureModeSupported:AVCaptureExposureModeCustom]) {
+      float maxISO = device.activeFormat.maxISO;
+      [device setExposureModeCustomWithDuration:exposureDuration ISO:maxISO completionHandler:nil];
+      NSLog(@"[NightMode] enabled — maxISO=%.0f exposure=1/5s fps=5", maxISO);
+    } else {
+      NSLog(@"[NightMode] enabled — custom exposure not supported, applying fps=5 only");
+    }
     device.activeVideoMinFrameDuration = CMTimeMake(1, 5);
     device.activeVideoMaxFrameDuration = CMTimeMake(1, 5);
-    NSLog(@"[NightMode] enabled — maxISO=%.0f exposure=1/5s fps=5", maxISO);
   } else {
     if ([device isExposureModeSupported:AVCaptureExposureModeContinuousAutoExposure]) {
       [device setExposureMode:AVCaptureExposureModeContinuousAutoExposure];
