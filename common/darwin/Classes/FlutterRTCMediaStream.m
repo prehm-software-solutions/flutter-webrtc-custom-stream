@@ -528,10 +528,21 @@ typedef void (^NavigatorUserMediaSuccessCallback)(RTCMediaStream* mediaStream);
                                                                         trackId:trackUUID];
     LocalVideoTrack *localVideoTrack = [[LocalVideoTrack alloc] initWithTrack:videoTrack videoProcessing:videoProcessingAdapter];
       
-    __weak RTCCameraVideoCapturer* capturer = self.videoCapturer;
+    __weak typeof(self) weakSelf = self;
+    RTCCameraVideoCapturer* capturer = self.videoCapturer;
     self.videoCapturerStopHandlers[videoTrack.trackId] = ^(CompletionHandler handler) {
       NSLog(@"Stop video capturer, trackID %@", videoTrack.trackId);
-      [capturer stopCaptureWithCompletionHandler:handler];
+      __strong typeof(weakSelf) strongSelf = weakSelf;
+      if (!capturer) {
+        handler();
+        return;
+      }
+      [capturer stopCaptureWithCompletionHandler:^{
+        if (strongSelf.videoCapturer == capturer) {
+          strongSelf.videoCapturer = nil;
+        }
+        handler();
+      }];
     };
 
     if (!videoDeviceId) {

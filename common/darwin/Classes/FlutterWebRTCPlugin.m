@@ -685,7 +685,8 @@ static FlutterWebRTCPlugin *sharedSingleton;
     NSDictionary* argsMap = call.arguments;
     NSString* streamId = argsMap[@"streamId"];
     RTCMediaStream* stream = self.localStreams[streamId];
-    BOOL shouldCallResult = YES;
+    NSMutableArray* stopHandlers = [NSMutableArray array];
+    NSMutableArray<NSString*>* stoppedTrackIds = [NSMutableArray array];
     if (stream) {
       for (RTCVideoTrack* track in stream.videoTracks) {
         [_localTracks removeObjectForKey:track.trackId];
@@ -696,12 +697,8 @@ static FlutterWebRTCPlugin *sharedSingleton;
         }
         CapturerStopHandler stopHandler = self.videoCapturerStopHandlers[videoTrack.trackId];
         if (stopHandler) {
-          shouldCallResult = NO;
-          stopHandler(^{
-            NSLog(@"video capturer stopped, trackID = %@", videoTrack.trackId);
-            self.videoCapturer = nil;
-            result(nil);
-          });
+          [stopHandlers addObject:[stopHandler copy]];
+          [stoppedTrackIds addObject:videoTrack.trackId];
           [self.videoCapturerStopHandlers removeObjectForKey:videoTrack.trackId];
         }
       }
@@ -711,9 +708,23 @@ static FlutterWebRTCPlugin *sharedSingleton;
       [self.localStreams removeObjectForKey:streamId];
       [self deactiveRtcAudioSession];
     }
-    if (shouldCallResult) {
-      // do not call if will be called in stopCapturer above.
+    if (stopHandlers.count == 0) {
       result(nil);
+    } else {
+      __block NSInteger pendingVideoStops = stopHandlers.count;
+      __block BOOL disposeResultCalled = NO;
+      for (NSUInteger i = 0; i < stopHandlers.count; i++) {
+        CapturerStopHandler stopHandler = (CapturerStopHandler)stopHandlers[i];
+        NSString* stoppedTrackId = stoppedTrackIds[i];
+        stopHandler(^{
+          NSLog(@"video capturer stopped, trackID = %@", stoppedTrackId);
+          pendingVideoStops--;
+          if (pendingVideoStops == 0 && !disposeResultCalled) {
+            disposeResultCalled = YES;
+            result(nil);
+          }
+        });
+      }
     }
   } else if ([@"mediaStreamTrackSetEnable" isEqualToString:call.method]) {
     NSDictionary* argsMap = call.arguments;
@@ -783,6 +794,7 @@ static FlutterWebRTCPlugin *sharedSingleton;
     NSDictionary* argsMap = call.arguments;
     NSString* trackId = argsMap[@"trackId"];
     BOOL audioTrack = NO;
+    BOOL videoTrack = NO;
     for (NSString* streamId in self.localStreams) {
       RTCMediaStream* stream = [self.localStreams objectForKey:streamId];
       for (RTCAudioTrack* track in stream.audioTracks) {
@@ -794,13 +806,7 @@ static FlutterWebRTCPlugin *sharedSingleton;
       for (RTCVideoTrack* track in stream.videoTracks) {
         if ([trackId isEqualToString:track.trackId]) {
           [stream removeVideoTrack:track];
-          CapturerStopHandler stopHandler = self.videoCapturerStopHandlers[track.trackId];
-          if (stopHandler) {
-            stopHandler(^{
-              NSLog(@"video capturer stopped, trackID = %@", track.trackId);
-            });
-            [self.videoCapturerStopHandlers removeObjectForKey:track.trackId];
-          }
+          videoTrack = YES;
         }
       }
     }
@@ -812,7 +818,20 @@ static FlutterWebRTCPlugin *sharedSingleton;
     if(renderer != nil) {
       renderer.videoTrack = nil;
     }
-    result(nil);
+
+    CapturerStopHandler stopHandler = self.videoCapturerStopHandlers[trackId];
+    if (stopHandler) {
+      stopHandler(^{
+        NSLog(@"video capturer stopped, trackID = %@", trackId);
+        result(nil);
+      });
+      [self.videoCapturerStopHandlers removeObjectForKey:trackId];
+    } else {
+      if (videoTrack) {
+        NSLog(@"No video capturer stop handler found, trackID = %@", trackId);
+      }
+      result(nil);
+    }
   } else if ([@"restartIce" isEqualToString:call.method]) {
     NSDictionary* argsMap = call.arguments;
     NSString* peerConnectionId = argsMap[@"peerConnectionId"];
