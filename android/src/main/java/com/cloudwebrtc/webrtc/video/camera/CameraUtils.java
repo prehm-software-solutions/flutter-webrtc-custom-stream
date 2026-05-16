@@ -698,6 +698,10 @@ public class CameraUtils {
         final boolean requestedExposureInRange = exposureTimeRange != null
                 && exposureTimeRange.contains(requestedExposureNs);
         final boolean requestedIsoInRange = isoRange != null && isoRange.contains(maxISO);
+        final boolean useManualNightMode = manualSensorSupported
+                && requestedExposureInRange
+                && requestedIsoInRange;
+        final Range<Integer> fallbackFpsRange = selectLowLightFpsRange(fpsRanges);
 
         Log.d(TAG, "[NightMode] request start trackId=" + trackId
                 + " enabled=" + enabled
@@ -721,16 +725,34 @@ public class CameraUtils {
                 + " requestedExposureInRange=" + requestedExposureInRange
                 + " requestedFpsRange=" + requestedFpsRange
                 + " requestedFpsAdvertised=" + requestedFpsAdvertised
+                + " fallbackFpsRange=" + rangeToString(fallbackFpsRange)
+                + " useManualNightMode=" + useManualNightMode
                 + " torchOn=" + isTorchOn);
 
         if (enabled) {
-          captureRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF);
-          captureRequestBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, maxISO);
-          captureRequestBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, requestedExposureNs); // 1/5s in ns
-          captureRequestBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, requestedFpsRange);
+          if (useManualNightMode) {
+            captureRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF);
+            captureRequestBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, maxISO);
+            captureRequestBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, requestedExposureNs); // 1/5s in ns
+            captureRequestBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, requestedFpsRange);
+            Log.d(TAG, "[NightMode] enabled path=manual maxISO=" + maxISO
+                    + " exposureNs=" + requestedExposureNs
+                    + " fpsRange=" + requestedFpsRange
+                    + " requestedFpsAdvertised=" + requestedFpsAdvertised);
+          } else {
+            captureRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+            captureRequestBuilder.set(CaptureRequest.CONTROL_AE_LOCK, false);
+            if (fallbackFpsRange != null) {
+              captureRequestBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fallbackFpsRange);
+            }
+            Log.d(TAG, "[NightMode] enabled path=fallback reason="
+                    + "manualSensorSupported=" + manualSensorSupported
+                    + " requestedExposureInRange=" + requestedExposureInRange
+                    + " requestedIsoInRange=" + requestedIsoInRange
+                    + " fallbackFpsRange=" + rangeToString(fallbackFpsRange));
+          }
           captureRequestBuilder.set(CaptureRequest.FLASH_MODE,
                   isTorchOn ? CaptureRequest.FLASH_MODE_TORCH : CaptureRequest.FLASH_MODE_OFF);
-          Log.d(TAG, "[NightMode] enabled — maxISO=" + maxISO + " exposure=1/5s fps=5");
         } else {
           captureRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
           captureRequestBuilder.set(CaptureRequest.CONTROL_AE_LOCK, false);
@@ -774,6 +796,20 @@ public class CameraUtils {
       if (range.equals(target)) return true;
     }
     return false;
+  }
+
+  private static Range<Integer> selectLowLightFpsRange(Range<Integer>[] ranges) {
+    if (ranges == null || ranges.length == 0) return null;
+
+    Range<Integer> best = ranges[0];
+    for (Range<Integer> range : ranges) {
+      if (range.getLower() < best.getLower()
+              || (range.getLower().equals(best.getLower())
+              && range.getUpper() < best.getUpper())) {
+        best = range;
+      }
+    }
+    return best;
   }
 
   private static String intArrayToString(int[] values) {
