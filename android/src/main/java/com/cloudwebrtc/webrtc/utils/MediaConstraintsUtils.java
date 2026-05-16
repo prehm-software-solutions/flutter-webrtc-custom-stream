@@ -52,6 +52,8 @@ public class MediaConstraintsUtils {
       Log.d(TAG, "optional constraints are not an array");
     }
 
+    parseFlatAudioConstraints(constraints, mediaConstraints.optional);
+
     return mediaConstraints;
   }
 
@@ -72,6 +74,32 @@ public class MediaConstraintsUtils {
       String value = getMapStrValue(src, entry.getKey());
       dst.add(new KeyValuePair(key, value));
     }
+  }
+
+  private static void parseFlatAudioConstraints(
+      ConstraintsMap constraints,
+      List<KeyValuePair> optional) {
+    addFlatAudioConstraint(constraints, optional, "echoCancellation", "echoCancellation");
+    addFlatAudioConstraint(constraints, optional, "echoCancellation", "googEchoCancellation");
+    addFlatAudioConstraint(constraints, optional, "echoCancellation", "googEchoCancellation2");
+    addFlatAudioConstraint(constraints, optional, "echoCancellation", "googDAEchoCancellation");
+    addFlatAudioConstraint(constraints, optional, "noiseSuppression", "noiseSuppression");
+    addFlatAudioConstraint(constraints, optional, "noiseSuppression", "googNoiseSuppression");
+    addFlatAudioConstraint(constraints, optional, "autoGainControl", "googAutoGainControl");
+    addFlatAudioConstraint(constraints, optional, "highPassFilter", "googHighpassFilter");
+  }
+
+  private static void addFlatAudioConstraint(
+      ConstraintsMap constraints,
+      List<KeyValuePair> optional,
+      String sourceKey,
+      String targetKey) {
+    if (!constraints.hasKey(sourceKey)) return;
+
+    String value = getMapStrValue(constraints, sourceKey);
+    if (value == null) return;
+
+    optional.add(new KeyValuePair(targetKey, value));
   }
 
   private static String getMapStrValue(ConstraintsMap map, String key) {
