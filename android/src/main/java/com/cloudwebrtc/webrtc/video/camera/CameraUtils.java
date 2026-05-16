@@ -29,6 +29,7 @@ import org.webrtc.Camera2Capturer;
 import org.webrtc.CameraEnumerationAndroid;
 
 import java.lang.reflect.Field;
+import java.util.Arrays;
 import java.util.List;
 
 import io.flutter.embedding.engine.systemchannels.PlatformChannel;
@@ -673,18 +674,60 @@ public class CameraUtils {
       try {
         final CaptureRequest.Builder captureRequestBuilder =
                 cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+        final String cameraId = cameraDevice.getId();
+        final CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+        final Range<Integer> isoRange =
+                characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE);
+        final Range<Long> exposureTimeRange =
+                characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE);
+        final Range<Integer>[] fpsRanges =
+                characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+        final int[] aeModes = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES);
+        final int[] sceneModes = characteristics.get(CameraCharacteristics.CONTROL_AVAILABLE_SCENE_MODES);
+        final int[] capabilities =
+                characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
+        final Integer hardwareLevel =
+                characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL);
+        final boolean manualSensorSupported = contains(
+                capabilities,
+                CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR);
+        final Range<Integer> requestedFpsRange = new Range<>(5, 5);
+        final long requestedExposureNs = 200_000_000L;
+        final int maxISO = isoRange != null ? isoRange.getUpper() : 3200;
+        final boolean requestedFpsAdvertised = containsRange(fpsRanges, requestedFpsRange);
+        final boolean requestedExposureInRange = exposureTimeRange != null
+                && exposureTimeRange.contains(requestedExposureNs);
+        final boolean requestedIsoInRange = isoRange != null && isoRange.contains(maxISO);
+
+        Log.d(TAG, "[NightMode] request start trackId=" + trackId
+                + " enabled=" + enabled
+                + " cameraId=" + cameraId
+                + " manufacturer=" + Build.MANUFACTURER
+                + " model=" + Build.MODEL
+                + " device=" + Build.DEVICE
+                + " sdk=" + Build.VERSION.SDK_INT);
+        Log.d(TAG, "[NightMode] capabilities hardwareLevel=" + hardwareLevel
+                + " manualSensorSupported=" + manualSensorSupported
+                + " capabilities=" + intArrayToString(capabilities));
+        Log.d(TAG, "[NightMode] available aeModes=" + intArrayToString(aeModes)
+                + " sceneModes=" + intArrayToString(sceneModes)
+                + " fpsRanges=" + rangeArrayToString(fpsRanges)
+                + " isoRange=" + rangeToString(isoRange)
+                + " exposureTimeRange=" + rangeToString(exposureTimeRange));
+        Log.d(TAG, "[NightMode] requested manualAeMode=" + CaptureRequest.CONTROL_AE_MODE_OFF
+                + " requestedIso=" + maxISO
+                + " requestedIsoInRange=" + requestedIsoInRange
+                + " requestedExposureNs=" + requestedExposureNs
+                + " requestedExposureInRange=" + requestedExposureInRange
+                + " requestedFpsRange=" + requestedFpsRange
+                + " requestedFpsAdvertised=" + requestedFpsAdvertised
+                + " torchOn=" + isTorchOn);
 
         if (enabled) {
-          final CameraCharacteristics characteristics =
-                  manager.getCameraCharacteristics(cameraDevice.getId());
-          Range<Integer> isoRange =
-                  characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE);
-          int maxISO = isoRange != null ? isoRange.getUpper() : 3200;
-
           captureRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF);
           captureRequestBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, maxISO);
-          captureRequestBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, 200_000_000L); // 1/5s in ns
-          captureRequestBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, new Range<>(5, 5));
+          captureRequestBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, requestedExposureNs); // 1/5s in ns
+          captureRequestBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, requestedFpsRange);
           captureRequestBuilder.set(CaptureRequest.FLASH_MODE,
                   isTorchOn ? CaptureRequest.FLASH_MODE_TORCH : CaptureRequest.FLASH_MODE_OFF);
           Log.d(TAG, "[NightMode] enabled — maxISO=" + maxISO + " exposure=1/5s fps=5");
@@ -697,8 +740,16 @@ public class CameraUtils {
         }
 
         captureRequestBuilder.addTarget(surface);
+        Log.d(TAG, "[NightMode] setRepeatingRequest start trackId=" + trackId
+                + " enabled=" + enabled
+                + " cameraId=" + cameraId);
         captureSession.setRepeatingRequest(captureRequestBuilder.build(), null, cameraThreadHandler);
+        Log.d(TAG, "[NightMode] setRepeatingRequest success trackId=" + trackId
+                + " enabled=" + enabled
+                + " cameraId=" + cameraId);
       } catch (CameraAccessException e) {
+        Log.e(TAG, "[NightMode] setRepeatingRequest CameraAccessException reason="
+                + e.getReason() + " message=" + e.getMessage(), e);
         throw new RuntimeException(e);
       }
 
@@ -707,6 +758,34 @@ public class CameraUtils {
     }
 
     resultError("setNightMode", "[NightMode] Camera2 not available", result);
+  }
+
+  private static boolean contains(int[] values, int target) {
+    if (values == null) return false;
+    for (int value : values) {
+      if (value == target) return true;
+    }
+    return false;
+  }
+
+  private static boolean containsRange(Range<Integer>[] ranges, Range<Integer> target) {
+    if (ranges == null) return false;
+    for (Range<Integer> range : ranges) {
+      if (range.equals(target)) return true;
+    }
+    return false;
+  }
+
+  private static String intArrayToString(int[] values) {
+    return values == null ? "null" : Arrays.toString(values);
+  }
+
+  private static String rangeArrayToString(Range<Integer>[] ranges) {
+    return ranges == null ? "null" : Arrays.toString(ranges);
+  }
+
+  private static String rangeToString(Range<?> range) {
+    return range == null ? "null" : range.toString();
   }
 
   private class NoSuchFieldWithNameException extends NoSuchFieldException {
