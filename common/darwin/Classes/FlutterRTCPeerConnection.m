@@ -358,6 +358,36 @@
   }
 }
 
+- (void)addFlatAudioConstraint:(NSDictionary*)src
+                      sourceKey:(NSString*)sourceKey
+                      targetKey:(NSString*)targetKey
+             intoWebRTCConstraints:(NSMutableDictionary<NSString*, NSString*>*)dst {
+  id srcValue = src[sourceKey];
+  if (!srcValue) {
+    return;
+  }
+
+  NSString* dstValue;
+  if ([srcValue isKindOfClass:[NSNumber class]]) {
+    dstValue = [srcValue boolValue] ? @"true" : @"false";
+  } else {
+    dstValue = [srcValue description];
+  }
+  dst[targetKey] = dstValue;
+}
+
+- (void)parseFlatAudioConstraints:(NSDictionary*)src
+             intoWebRTCConstraints:(NSMutableDictionary<NSString*, NSString*>*)dst {
+  [self addFlatAudioConstraint:src sourceKey:@"echoCancellation" targetKey:@"echoCancellation" intoWebRTCConstraints:dst];
+  [self addFlatAudioConstraint:src sourceKey:@"echoCancellation" targetKey:@"googEchoCancellation" intoWebRTCConstraints:dst];
+  [self addFlatAudioConstraint:src sourceKey:@"echoCancellation" targetKey:@"googEchoCancellation2" intoWebRTCConstraints:dst];
+  [self addFlatAudioConstraint:src sourceKey:@"echoCancellation" targetKey:@"googDAEchoCancellation" intoWebRTCConstraints:dst];
+  [self addFlatAudioConstraint:src sourceKey:@"noiseSuppression" targetKey:@"noiseSuppression" intoWebRTCConstraints:dst];
+  [self addFlatAudioConstraint:src sourceKey:@"noiseSuppression" targetKey:@"googNoiseSuppression" intoWebRTCConstraints:dst];
+  [self addFlatAudioConstraint:src sourceKey:@"autoGainControl" targetKey:@"googAutoGainControl" intoWebRTCConstraints:dst];
+  [self addFlatAudioConstraint:src sourceKey:@"highPassFilter" targetKey:@"googHighpassFilter" intoWebRTCConstraints:dst];
+}
+
 /**
  * Parses a JavaScript object into a new <tt>RTCMediaConstraints</tt> instance.
  *
@@ -385,6 +415,8 @@
       }
     }
   }
+
+  [self parseFlatAudioConstraints:constraints intoWebRTCConstraints:optional_];
 
   return [[RTCMediaConstraints alloc] initWithMandatoryConstraints:mandatory_
                                                optionalConstraints:optional_];
